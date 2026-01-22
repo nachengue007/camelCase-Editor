@@ -32,9 +32,13 @@ cargo run
 ## Estructura del Proyecto
 
 ```
-editor/
+camelCaseEditor/
 ├── src/
+│   ├── cursor.rs
+│   ├── draw.rs
 │   ├── main.rs
+│   ├── moves.rs
+│   ├── selection.rs
 │   └── lib.rs
 ├── Cargo.toml
 └── README.md
