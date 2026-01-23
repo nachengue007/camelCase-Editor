@@ -111,6 +111,8 @@ pub fn draw(
       "Ctrl + Alt + C -> Copiar",
       "Ctrl + Alt + X -> Cortar",
       "Ctrl + Alt + V -> Pegar",
+      "Ctrl + Alt + S -> Guardar archivo",
+      "Ctrl + Alt + O -> Abrir archivo",
       "Shift + Flechas -> Seleccionar",
       "Ctrl + Flechas -> Mover por palabra",
       "Inicio/Home -> Mover al principio de la linea",
@@ -129,7 +131,10 @@ pub fn draw(
     let start_y = (term_height.saturating_sub(box_height)) / 2;
 
     execute!(stdout(), MoveTo(start_x as u16, start_y as u16))?;
-    print!("+{}+", "-".repeat(box_width - 2));
+
+    execute!(stdout(),SetForegroundColor(Color::DarkRed))?;
+    print!("┌{}┐", "-".repeat(box_width - 2));
+    execute!(stdout(), ResetColor)?;
 
     for (i, line) in help_lines.iter().enumerate() {
       execute!(stdout(), MoveTo(start_x as u16, (start_y + 1 + i) as u16))?;
@@ -139,14 +144,22 @@ pub fn draw(
         text.truncate(box_width - 4);
       }
 
-      print!("| {:<width$} |", text, width = box_width - 4);
+      execute!(stdout(),SetForegroundColor(Color::DarkRed))?;
+      print!("|");
+      execute!(stdout(), ResetColor)?;
+
+      print!(" {:<width$} ", text, width = box_width - 4);
+
+      execute!(stdout(),SetForegroundColor(Color::DarkRed))?;
+      print!("|");
+      execute!(stdout(), ResetColor)?;
     }
 
-    execute!(
-      stdout(),
-      MoveTo(start_x as u16, (start_y + box_height - 1) as u16)
-    )?;
-    print!("+{}+", "-".repeat(box_width - 2));
+    execute!(stdout(),MoveTo(start_x as u16, (start_y + box_height - 1) as u16))?;
+
+    execute!(stdout(),SetForegroundColor(Color::DarkRed))?;
+    print!("└{}┘", "-".repeat(box_width - 2));
+    execute!(stdout(), ResetColor)?;
   }
 
   if !show_help {
@@ -168,5 +181,5 @@ pub fn draw(
 
 
 pub fn is_separator(c: char) -> bool {
-  c == ' ' || c == '.' || c == '?' || c == '<' || c == '>' || c == '|' || c == '/' || c == '\\' || c == '"' || c == '\''
+  c == ' ' || c == '.' || c == '?' || c == '<' || c == '>' || c == '|' || c == '/' || c == '\\' || c == '"' || c == '\'' || c == ';'
 }
