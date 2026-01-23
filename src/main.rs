@@ -16,7 +16,7 @@ mod moves;
 use moves::{ move_word_left, move_word_right };
 
 mod utils;
-use utils::{char_to_byte_idx, line_len_chars};
+use utils::{ char_to_byte_idx, line_len_chars, set_windows_clipboard, get_windows_clipboard };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
   enable_raw_mode()?;
@@ -27,13 +27,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
   let mut cursor = CursorPos{ x: 0, y: 0 };
   let mut selection_start: Option<CursorPos> = None;
-  let mut clipboard = String::new();
 
+  let mut scroll_x: usize = 0;
   let mut scroll_y: usize = 0;
 
   let mut show_help: bool = false;
 
-  draw(&lines, &cursor, selection_start, scroll_y, 2, show_help)?;
+  draw(&lines, &cursor, selection_start, scroll_x, scroll_y, 2, show_help)?;
 
   loop {
     if let Event::Key(key) = read()? {
@@ -61,7 +61,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
           if key.modifiers.contains(KeyModifiers::CONTROL)
           && key.modifiers.contains(KeyModifiers::ALT) =>  {
             if let Some(text) = get_selected_text(&lines, &cursor, &selection_start) {
-              clipboard = text;
+              set_windows_clipboard(text);
             }
         },
       
@@ -70,7 +70,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
           if key.modifiers.contains(KeyModifiers::CONTROL)
           && key.modifiers.contains(KeyModifiers::ALT) => {
             if let Some(text) = get_selected_text(&lines, &cursor, &selection_start) {
-              clipboard = text;
+              set_windows_clipboard(text);
               delete_selection(&mut lines, &mut cursor, &mut selection_start);
             }
         },
@@ -79,8 +79,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         KeyCode::Char('v') 
           if key.modifiers.contains(KeyModifiers::CONTROL)
           && key.modifiers.contains(KeyModifiers::ALT) => {
-            if !clipboard.is_empty() {
-              paste_text(&mut lines, &mut cursor, &mut selection_start, &clipboard);
+            if let Some(text) = get_windows_clipboard() {
+              paste_text(&mut lines, &mut cursor, &mut selection_start, &text);
             }
         },
 
@@ -176,6 +176,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // inicio
         KeyCode::Home => {
+          let selecting = key.modifiers.contains(KeyModifiers::SHIFT);
+
+          if selecting {
+            start_selection_if_needed(&mut selection_start, CursorPos { x: cursor.x, y: cursor.y });
+          }
+          else{ 
+            selection_start = None;
+          }
+
           if key.modifiers.contains(KeyModifiers::CONTROL){
             cursor.y = 0;
           }
@@ -184,6 +193,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // final
         KeyCode::End => {
+          let selecting = key.modifiers.contains(KeyModifiers::SHIFT);
+
+          if selecting {
+            start_selection_if_needed(&mut selection_start, CursorPos { x: cursor.x, y: cursor.y });
+          }
+          else{ 
+            selection_start = None;
+          }
+
           if key.modifiers.contains(KeyModifiers::CONTROL){
             cursor.y = lines.len() - 1;
           }
@@ -217,8 +235,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         _ => {}
       }
 
-      let (_, term_height) = size()?;
+      let (term_width, term_height) = size()?;
       let visible_lines = term_height as usize - 2;
+
+      let usable_width = (term_width as usize).saturating_sub(2);
+      
+      if cursor.x < scroll_x {
+        scroll_x = cursor.x;
+      }
+      
+      if cursor.x >= scroll_x + usable_width {
+        scroll_x = cursor.x + 1 - usable_width;
+      }
 
       if cursor.y < scroll_y {
         scroll_y = cursor.y;
@@ -228,7 +256,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         scroll_y = cursor.y + 1 - visible_lines;
       }
 
-      draw(&lines, &cursor, selection_start, scroll_y, 2, show_help)?;
+      draw(&lines, &cursor, selection_start, scroll_x, scroll_y, 2, show_help)?;
     }
   }
 
