@@ -123,7 +123,7 @@ pub fn paste_text(lines: &mut Vec<String>, cursor: &mut CursorPos, selection: &m
   if parts.len() == 1 {
     let byte_idx = char_to_byte_idx(&lines[cursor.y], cursor.x);
     lines[cursor.y].insert_str(byte_idx, parts[0]);
-    cursor.x += parts[0].len();
+    cursor.x += parts[0].chars().count();
   }
   else {
     let tail = lines[cursor.y].split_off(cursor.x);
@@ -137,7 +137,7 @@ pub fn paste_text(lines: &mut Vec<String>, cursor: &mut CursorPos, selection: &m
     lines[last].push_str(&tail);
 
     cursor.y = last;
-    cursor.x = parts.last().unwrap().len();
+    cursor.x = parts.last().unwrap().chars().count();
   }
 
   *selection = None;

@@ -306,7 +306,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
           if key.modifiers.contains(KeyModifiers::CONTROL){
             cursor.y = lines.len() - 1;
           }
-          cursor.x = lines[cursor.y].len();
+          cursor.x = line_len_chars(&lines[cursor.y]);
         },
 
         // enter
