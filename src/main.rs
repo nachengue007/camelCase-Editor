@@ -18,6 +18,12 @@ use moves::{ move_word_left, move_word_right };
 mod utils;
 use utils::{ char_to_byte_idx, line_len_chars, set_windows_clipboard, get_windows_clipboard };
 
+mod file;
+use file::{ save_file, open_file };
+
+mod popup;
+use popup::PopupMode;
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
   enable_raw_mode()?;
 
@@ -25,7 +31,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
   let mut lines: Vec<String> = vec![String::new()];
 
-  let mut cursor = CursorPos{ x: 0, y: 0 };
+  let mut popup: Option<PopupMode> = None;
+  let mut popup_input: String = String::new();
+
+  let mut cursor: CursorPos = CursorPos{ x: 0, y: 0 };
   let mut selection_start: Option<CursorPos> = None;
 
   let mut scroll_x: usize = 0;
@@ -33,11 +42,77 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
   let mut show_help: bool = false;
 
-  draw(&lines, &cursor, selection_start, scroll_x, scroll_y, 2, show_help)?;
+  draw(&lines, &cursor, selection_start, scroll_x, scroll_y, 2, show_help, &popup, &popup_input)?;
 
   loop {
     if let Event::Key(key) = read()? {
       if key.kind != KeyEventKind::Press {
+        continue;
+      }
+
+      if !popup.is_none() {
+        match key.code {
+          KeyCode::Esc => {
+            popup = None;
+            popup_input.clear();
+          }
+      
+          KeyCode::Enter => {
+            if !popup_input.is_empty() {
+              let path = popup_input.clone();
+
+              match popup {
+                Some(PopupMode::Save) => {
+                  if let Err(e) = save_file(&path, &lines) {
+                    eprintln!("Error al guardar -> {}", e);
+                  }
+                }
+
+                Some(PopupMode::Open) => {
+                  match open_file(&path) {
+                    Ok(new_lines) => {
+                      lines = new_lines;
+                      cursor = CursorPos { x: 0, y: 0 };
+                      scroll_x = 0;
+                      scroll_y = 0;
+                      selection_start = None;
+                    }
+                    Err(e) => {
+                        eprintln!("Error al abrir -> {}", e);
+                    }
+                  }
+                }
+
+                None => {}
+              }
+            }
+
+            popup = None;
+            popup_input.clear();
+          }
+      
+          KeyCode::Backspace => {
+            popup_input.pop();
+          }
+      
+          KeyCode::Char(c) => {
+            popup_input.push(c);
+          }
+      
+          _ => {}
+        }
+      
+        draw(
+          &lines,
+          &cursor,
+          selection_start,
+          scroll_x,
+          scroll_y,
+          2,
+          show_help,
+          &popup,
+          &popup_input,
+        )?;
         continue;
       }
 
@@ -84,11 +159,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         },
 
+        // mostrar guardado
+        KeyCode::Char('s')
+          if key.modifiers.contains(KeyModifiers::CONTROL)
+          && key.modifiers.contains(KeyModifiers::ALT) =>
+        {
+          popup = Some(PopupMode::Save);
+          popup_input.clear();
+        }
+
+        // abrir
+        KeyCode::Char('o')
+          if key.modifiers.contains(KeyModifiers::CONTROL)
+          && key.modifiers.contains(KeyModifiers::ALT) => {
+            popup = Some(PopupMode::Open);
+            popup_input.clear();
+        },
+        
         // escribir
         KeyCode::Char(c) => {
-          //lines[cursor.y].insert(cursor.x, c);
-
           let byte_idx = char_to_byte_idx(&lines[cursor.y], cursor.x);
+
           lines[cursor.y].insert(byte_idx, c);
           cursor.x += 1;
         },
@@ -212,6 +303,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         KeyCode::Enter => {
           let byte_idx = char_to_byte_idx(&lines[cursor.y], cursor.x);
           let new_line = lines[cursor.y].split_off(byte_idx);
+
           lines.insert(cursor.y + 1, new_line);
           cursor.y += 1;
           cursor.x = 0;
@@ -223,10 +315,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             delete_selection(&mut lines, &mut cursor, &mut selection_start);
           } else if cursor.x > 0 {
             let byte_idx = char_to_byte_idx(&lines[cursor.y], cursor.x - 1);
+
             lines[cursor.y].remove(byte_idx);
             cursor.x -= 1;
           } else if cursor.y > 0 {
             let current = lines.remove(cursor.y);
+            
             cursor.y -= 1;
             cursor.x = line_len_chars(&lines[cursor.y]);
             lines[cursor.y].push_str(&current);
@@ -256,7 +350,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         scroll_y = cursor.y + 1 - visible_lines;
       }
 
-      draw(&lines, &cursor, selection_start, scroll_x, scroll_y, 2, show_help)?;
+      draw(&lines, &cursor, selection_start, scroll_x, scroll_y, 2, show_help, &popup, &popup_input)?;
     }
   }
 

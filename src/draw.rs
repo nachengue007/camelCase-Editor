@@ -5,6 +5,7 @@ use crossterm::terminal::{ Clear, ClearType };
 use crossterm::style::{ Color, ResetColor, SetBackgroundColor, SetForegroundColor };
 
 use crate::CursorPos;
+use crate::PopupMode;
 
 pub fn draw(
   lines: &Vec<String>,
@@ -14,6 +15,8 @@ pub fn draw(
   scroll_y: usize,
   ui_lines: usize,
   show_help: bool,
+  popup: &Option<PopupMode>,
+  popup_input: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
   let (term_width, term_height) = crossterm::terminal::size()?;
   let term_width = term_width as usize;
@@ -162,7 +165,66 @@ pub fn draw(
     execute!(stdout(), ResetColor)?;
   }
 
-  if !show_help {
+  if !popup.is_none() {
+    let box_width = 50;
+    let box_height = 5;
+
+    let start_x = (term_width.saturating_sub(box_width)) / 2;
+    let start_y = (term_height.saturating_sub(box_height)) / 2;
+
+    let title = match popup {
+      Some(PopupMode::Save) => "Guardar Archivo",
+      Some(PopupMode::Open) => "Abrir Archivo",
+      None => "",
+    };
+
+    let help = match popup {
+      Some(PopupMode::Save) => "Enter = Guardar   Esc = Cancelar",
+      Some(PopupMode::Open) => "Enter = Abrir     Esc = Cancelar",
+      None => "",
+    };
+
+    for y in 0..box_height {
+      execute!(stdout(), MoveTo(start_x as u16, (start_y + y) as u16))?;
+      
+      execute!(stdout(), SetForegroundColor(Color::DarkRed))?;
+      print!("|");
+      execute!(stdout(), ResetColor)?;
+      
+      print!("{}", " ".repeat(box_width - 2));
+      
+      execute!(stdout(), SetForegroundColor(Color::DarkRed))?;
+      print!("|");
+      execute!(stdout(), ResetColor)?;
+    }
+
+    // borde
+    execute!(stdout(), MoveTo(start_x as u16, start_y as u16))?;
+    
+    execute!(stdout(), SetForegroundColor(Color::DarkRed))?;
+    print!("┌{}┐", "─".repeat(box_width - 2));
+    execute!(stdout(), ResetColor)?;
+  
+    execute!(stdout(), MoveTo(start_x as u16, (start_y + box_height - 1) as u16))?;
+
+    execute!(stdout(), SetForegroundColor(Color::DarkRed))?;
+    print!("└{}┘", "─".repeat(box_width - 2));
+    execute!(stdout(), ResetColor)?;
+    
+    // título
+    execute!(stdout(), MoveTo((start_x + 2) as u16, (start_y + 1) as u16))?;
+    print!("{}", title);
+  
+    // input
+    execute!(stdout(), MoveTo((start_x + 2) as u16, (start_y + 2) as u16))?;
+    print!("Nombre: {}", popup_input);
+  
+    // ayuda
+    execute!(stdout(), MoveTo((start_x + 2) as u16, (start_y + 3) as u16))?;
+    print!("{}", help);
+  }
+
+  if !show_help && popup.is_none() {
     let screen_y = cursor.y.saturating_sub(scroll_y) + ui_lines;
 
     // Cursor visible dentro del viewport horizontal (+1 por el "<")
