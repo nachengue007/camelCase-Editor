@@ -40,9 +40,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   let mut scroll_x: usize = 0;
   let mut scroll_y: usize = 0;
 
-  let mut show_help: bool = false;
-
-  draw(&lines, &cursor, selection_start, scroll_x, scroll_y, 2, show_help, &popup, &popup_input)?;
+  draw(&lines, &cursor, selection_start, scroll_x, scroll_y, 2, &popup, &popup_input)?;
 
   loop {
     if let Event::Key(key) = read()? {
@@ -83,12 +81,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                   }
                 }
 
+                Some(PopupMode::Help) => {}
+
                 None => {}
               }
             }
 
-            popup = None;
             popup_input.clear();
+            popup = None;
           }
       
           KeyCode::Backspace => {
@@ -109,7 +109,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
           scroll_x,
           scroll_y,
           2,
-          show_help,
           &popup,
           &popup_input,
         )?;
@@ -120,21 +119,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // salir
         KeyCode::Char('q') 
           if key.modifiers.contains(KeyModifiers::CONTROL)
-          && key.modifiers.contains(KeyModifiers::ALT) => {
+          /* && key.modifiers.contains(KeyModifiers::ALT) */ => {
           break;
         },
 
         // ayuda
         KeyCode::Char('h')
           if key.modifiers.contains(KeyModifiers::CONTROL)
-          && key.modifiers.contains(KeyModifiers::ALT) => {
-            show_help = !show_help;
+          /* && key.modifiers.contains(KeyModifiers::ALT) */ => {
+            // show_help = !show_help;
+            popup = Some(PopupMode::Help);
+            popup_input.clear();
           }
         
         // copiar
         KeyCode::Char('c') 
           if key.modifiers.contains(KeyModifiers::CONTROL)
-          && key.modifiers.contains(KeyModifiers::ALT) =>  {
+          /* && key.modifiers.contains(KeyModifiers::ALT) */ =>  {
             if let Some(text) = get_selected_text(&lines, &cursor, &selection_start) {
               set_windows_clipboard(text);
             }
@@ -143,7 +144,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // cortar
         KeyCode::Char('x') 
           if key.modifiers.contains(KeyModifiers::CONTROL)
-          && key.modifiers.contains(KeyModifiers::ALT) => {
+          /* && key.modifiers.contains(KeyModifiers::ALT) */ => {
             if let Some(text) = get_selected_text(&lines, &cursor, &selection_start) {
               set_windows_clipboard(text);
               delete_selection(&mut lines, &mut cursor, &mut selection_start);
@@ -153,7 +154,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // pegar
         KeyCode::Char('v') 
           if key.modifiers.contains(KeyModifiers::CONTROL)
-          && key.modifiers.contains(KeyModifiers::ALT) => {
+          /* && key.modifiers.contains(KeyModifiers::ALT) */ => {
             if let Some(text) = get_windows_clipboard() {
               paste_text(&mut lines, &mut cursor, &mut selection_start, &text);
             }
@@ -162,7 +163,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // mostrar guardado
         KeyCode::Char('s')
           if key.modifiers.contains(KeyModifiers::CONTROL)
-          && key.modifiers.contains(KeyModifiers::ALT) =>
+          /* && key.modifiers.contains(KeyModifiers::ALT) */ =>
         {
           popup = Some(PopupMode::Save);
           popup_input.clear();
@@ -171,7 +172,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // abrir
         KeyCode::Char('o')
           if key.modifiers.contains(KeyModifiers::CONTROL)
-          && key.modifiers.contains(KeyModifiers::ALT) => {
+          /* && key.modifiers.contains(KeyModifiers::ALT) */ => {
             popup = Some(PopupMode::Open);
             popup_input.clear();
         },
@@ -179,6 +180,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // escribir
         KeyCode::Char(c) => {
           let byte_idx = char_to_byte_idx(&lines[cursor.y], cursor.x);
+
+          if has_selection(&selection_start, &cursor) {
+            delete_selection(&mut lines, &mut cursor, &mut selection_start);
+          }
 
           lines[cursor.y].insert(byte_idx, c);
           cursor.x += 1;
@@ -270,6 +275,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
           let selecting = key.modifiers.contains(KeyModifiers::SHIFT);
 
           if selecting {
+            if key.modifiers.contains(KeyModifiers::CONTROL){
+              cursor.y = 0;
+              cursor.x = 0;
+            }
+
             start_selection_if_needed(&mut selection_start, CursorPos { x: cursor.x, y: cursor.y });
           }
           else{ 
@@ -350,7 +360,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         scroll_y = cursor.y + 1 - visible_lines;
       }
 
-      draw(&lines, &cursor, selection_start, scroll_x, scroll_y, 2, show_help, &popup, &popup_input)?;
+      draw(&lines, &cursor, selection_start, scroll_x, scroll_y, 2, &popup, &popup_input)?;
     }
   }
 

@@ -6,6 +6,7 @@ use crossterm::style::{ Color, ResetColor, SetBackgroundColor, SetForegroundColo
 
 use crate::CursorPos;
 use crate::PopupMode;
+use crate::popup::draw_popup;
 
 pub fn draw(
   lines: &Vec<String>,
@@ -14,7 +15,6 @@ pub fn draw(
   scroll_x: usize,
   scroll_y: usize,
   ui_lines: usize,
-  show_help: bool,
   popup: &Option<PopupMode>,
   popup_input: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -26,11 +26,12 @@ pub fn draw(
 
   execute!(stdout(), MoveTo(0, 0))?;
 
-  let text: &str = "camelCase Editor  -  ctrl + alt + H ayuda";
-  let padding = (term_width.saturating_sub(text.len())) / 2;
+  let text: &str = "camelCase Editor  -  ctrl + H ayuda";
+  let left_padding: usize = (term_width.saturating_sub(text.len())) / 2;
+  let right_padding: usize = term_width.saturating_sub(text.len()).saturating_sub(left_padding);
 
   execute!(stdout(),SetForegroundColor(Color::Black),SetBackgroundColor(Color::Red))?;
-  print!("{}{}{}", " ".repeat(padding), text, " ".repeat(padding));
+  print!("{}{}{}", " ".repeat(left_padding), text, " ".repeat(right_padding));
   execute!(stdout(), ResetColor)?;
 
   // línea vacía debajo
@@ -122,125 +123,12 @@ pub fn draw(
   
   execute!(stdout(), ResetColor)?;
 
-  if show_help {
-    let help_lines = [
-      "Atajos del teclado",
-      "",
-      "Ctrl + Alt + Q -> Salir",
-      "Ctrl + Alt + C -> Copiar",
-      "Ctrl + Alt + X -> Cortar",
-      "Ctrl + Alt + V -> Pegar",
-      "Ctrl + Alt + S -> Guardar archivo",
-      "Ctrl + Alt + O -> Abrir archivo",
-      "Shift + Flechas -> Seleccionar",
-      "Ctrl + Flechas -> Mover por palabra",
-      "Inicio/Home -> Mover al principio de la linea",
-      "Fin/End -> Mover al final de la linea",
-      "Ctrl + Inicio/Home -> Mover al principio del documento",
-      "Ctrl + Fin/End -> Mover al final del documento",
-      "Ctrl + Alt + H -> Abrir/Cerrar ayuda",
-      "",
-      "Creado por Ignacio Fonseca",
-    ];
-
-    let box_width: usize = 64;
-    let box_height: usize = help_lines.len() + 2;
-
-    let start_x = (term_width.saturating_sub(box_width)) / 2;
-    let start_y = (term_height.saturating_sub(box_height)) / 2;
-
-    execute!(stdout(), MoveTo(start_x as u16, start_y as u16))?;
-
-    execute!(stdout(),SetForegroundColor(Color::DarkRed))?;
-    print!("┌{}┐", "-".repeat(box_width - 2));
-    execute!(stdout(), ResetColor)?;
-
-    for (i, line) in help_lines.iter().enumerate() {
-      execute!(stdout(), MoveTo(start_x as u16, (start_y + 1 + i) as u16))?;
-
-      let mut text = line.to_string();
-      if text.len() > box_width - 4 {
-        text.truncate(box_width - 4);
-      }
-
-      execute!(stdout(),SetForegroundColor(Color::DarkRed))?;
-      print!("|");
-      execute!(stdout(), ResetColor)?;
-
-      print!(" {:<width$} ", text, width = box_width - 4);
-
-      execute!(stdout(),SetForegroundColor(Color::DarkRed))?;
-      print!("|");
-      execute!(stdout(), ResetColor)?;
-    }
-
-    execute!(stdout(),MoveTo(start_x as u16, (start_y + box_height - 1) as u16))?;
-
-    execute!(stdout(),SetForegroundColor(Color::DarkRed))?;
-    print!("└{}┘", "-".repeat(box_width - 2));
-    execute!(stdout(), ResetColor)?;
+  if let Some(mode) = popup {
+    let popup_data = mode.to_popup(popup_input);
+    let _ = draw_popup(&popup_data, term_width, term_height);
   }
 
-  if !popup.is_none() {
-    let box_width = 50;
-    let box_height = 5;
-
-    let start_x = (term_width.saturating_sub(box_width)) / 2;
-    let start_y = (term_height.saturating_sub(box_height)) / 2;
-
-    let title = match popup {
-      Some(PopupMode::Save) => "Guardar Archivo",
-      Some(PopupMode::Open) => "Abrir Archivo",
-      None => "",
-    };
-
-    let help = match popup {
-      Some(PopupMode::Save) => "Enter = Guardar   Esc = Cancelar",
-      Some(PopupMode::Open) => "Enter = Abrir     Esc = Cancelar",
-      None => "",
-    };
-
-    for y in 0..box_height {
-      execute!(stdout(), MoveTo(start_x as u16, (start_y + y) as u16))?;
-      
-      execute!(stdout(), SetForegroundColor(Color::DarkRed))?;
-      print!("|");
-      execute!(stdout(), ResetColor)?;
-      
-      print!("{}", " ".repeat(box_width - 2));
-      
-      execute!(stdout(), SetForegroundColor(Color::DarkRed))?;
-      print!("|");
-      execute!(stdout(), ResetColor)?;
-    }
-
-    // borde
-    execute!(stdout(), MoveTo(start_x as u16, start_y as u16))?;
-    
-    execute!(stdout(), SetForegroundColor(Color::DarkRed))?;
-    print!("┌{}┐", "─".repeat(box_width - 2));
-    execute!(stdout(), ResetColor)?;
-  
-    execute!(stdout(), MoveTo(start_x as u16, (start_y + box_height - 1) as u16))?;
-
-    execute!(stdout(), SetForegroundColor(Color::DarkRed))?;
-    print!("└{}┘", "─".repeat(box_width - 2));
-    execute!(stdout(), ResetColor)?;
-    
-    // título
-    execute!(stdout(), MoveTo((start_x + 2) as u16, (start_y + 1) as u16))?;
-    print!("{}", title);
-  
-    // input
-    execute!(stdout(), MoveTo((start_x + 2) as u16, (start_y + 2) as u16))?;
-    print!("Nombre: {}", popup_input);
-  
-    // ayuda
-    execute!(stdout(), MoveTo((start_x + 2) as u16, (start_y + 3) as u16))?;
-    print!("{}", help);
-  }
-
-  if !show_help && popup.is_none() {
+  if popup.is_none() {
     let screen_y = cursor.y.saturating_sub(scroll_y) + ui_lines;
 
     // Cursor visible dentro del viewport horizontal (+1 por el "<")
