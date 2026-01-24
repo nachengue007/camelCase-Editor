@@ -330,7 +330,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
       }
 
       let (term_width, term_height) = size()?;
-      let visible_lines = term_height as usize - 2;
+      let visible_lines = term_height as usize - (2 + 1);
 
       let usable_width = (term_width as usize).saturating_sub(2);
       

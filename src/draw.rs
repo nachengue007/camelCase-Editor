@@ -37,7 +37,7 @@ pub fn draw(
   execute!(stdout(), MoveTo(0, 1))?;
   print!("");
 
-  let visible = term_height.saturating_sub(ui_lines);
+  let visible = term_height.saturating_sub(ui_lines + 1);
   let usable_width = term_width.saturating_sub(2);
 
   for screen_y in 0..visible {
@@ -105,6 +105,22 @@ pub fn draw(
       print!("{}", ' ' );
     }
   }
+
+  let status_y = term_height - 1;
+
+  // limpiar toda la linea del status
+  execute!(stdout(), MoveTo(0, status_y as u16))?;
+  print!("{}", " ".repeat(term_width));
+  execute!(stdout(), MoveTo(0, status_y as u16))?;
+  
+  execute!(stdout(), SetForegroundColor(Color::Black), SetBackgroundColor(Color::Red))?;
+  
+  let status = format!(" Linea {} | Columna {} | Scroll X:{} Y:{} ", cursor.y + 1, cursor.x + 1, scroll_x, scroll_y);
+  
+  let padded = format!("{:<width$}", status, width = term_width);
+  print!("{}", padded);
+  
+  execute!(stdout(), ResetColor)?;
 
   if show_help {
     let help_lines = [
