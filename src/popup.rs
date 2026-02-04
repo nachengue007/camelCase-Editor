@@ -1,6 +1,6 @@
 use std::io::stdout;
 
-use crossterm::{cursor::MoveTo, execute, style::{Color, ResetColor, SetForegroundColor}};
+use crossterm::{cursor::MoveTo, execute, style::{Color, ResetColor, SetForegroundColor, SetBackgroundColor}};
 
 #[derive(Clone)]
 pub struct Popup {
@@ -9,11 +9,14 @@ pub struct Popup {
   pub footer: String,
   pub width: usize,
   pub height: usize,
+  pub selected_line: Option<usize>,
+  pub scroll: usize,
 }
 
+#[derive(Clone)]
 pub enum PopupMode {
-  Save,
-  Open,
+  Save { selected: usize, entries: Vec<String>, scroll_y: usize },
+  Open { selected: usize, entries: Vec<String>, scroll_y: usize },
   Help,
 }
 
@@ -47,6 +50,8 @@ impl Popup {
       footer: "Creado por Ignacio Fonseca".to_string(),
       width: box_width,
       height: box_height,
+      selected_line: None,
+      scroll: 0,
     }
   }
 }
@@ -54,27 +59,56 @@ impl Popup {
 impl PopupMode {
   pub fn to_popup(&self, input: &str) -> Popup {
     match self {
-      PopupMode::Save => Popup {
-        title: "Guardar archivo".to_string(),
-        lines: vec![
-          format!("Nombre: {}", input),
-        ],
-        footer: "Enter = Guardar   Esc = Cancelar".to_string(),
-        width: 50,
-        height: 7,
-      },
+      PopupMode::Save { selected, entries, scroll_y } => {
+          let mut lines = vec![format!("Guardar como: {}", input)];
+          lines.push(format!("Directorio: .")); // simplified for now or use actual path
+          
+          let max_visible = 5; 
+          let visible_entries = entries.iter()
+              .skip(*scroll_y)
+              .take(max_visible)
+              .cloned();
 
-      PopupMode::Open => Popup {
-        title: "Abrir archivo".to_string(),
-        lines: vec![
-          format!("Nombre: {}", input),
-        ],
-        footer: "Enter = Abrir     Esc = Cancelar".to_string(),
-        width: 50,
-        height: 7,
-      },
+          lines.extend(visible_entries);
 
-      PopupMode::Help => Popup::help(),
+          Popup {
+              title: "Guardar archivo".to_string(),
+              lines,
+              footer: format!("Enter = Guardar   Esc = Cancelar"),
+              width: 50,
+              height: 12,
+              selected_line: Some(selected.saturating_sub(*scroll_y) + 2), // +2 because of title and dir header
+              scroll: *scroll_y,
+          }
+      }
+
+      PopupMode::Open { selected, entries, scroll_y } => {
+          let mut lines = vec![format!("Directorio: {}", input)];
+          
+          let max_visible = 6;
+          let visible_entries = entries.iter()
+              .skip(*scroll_y)
+              .take(max_visible)
+              .cloned();
+
+          lines.extend(visible_entries);
+
+          Popup {
+              title: "Abrir archivo".to_string(),
+              lines,
+              footer: format!("{} de {} - Esc = Salir", *selected + 1, entries.len()),
+              width: 50,
+              height: 12,
+              selected_line: Some(selected.saturating_sub(*scroll_y) + 1),
+              scroll: *scroll_y,
+          }
+      }
+
+      PopupMode::Help => {
+          let mut p = Popup::help();
+          p.selected_line = None;
+          p
+      }
     }
   }
 }
@@ -136,7 +170,14 @@ pub fn draw_popup(
       stdout(),
       MoveTo((start_x + 2) as u16, (content_start_y + i) as u16)
     )?;
-    print!("{}", line);
+    
+    if Some(i) == popup.selected_line {
+        execute!(stdout(), SetForegroundColor(Color::Black), SetBackgroundColor(Color::White))?;
+        print!("{:<width$}", line, width = inner_width - 2);
+        execute!(stdout(), ResetColor)?;
+    } else {
+        print!("{}", line);
+    }
   }
 
   // === FOOTER (centrado) ===

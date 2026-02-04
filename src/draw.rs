@@ -17,6 +17,7 @@ pub fn draw(
   ui_lines: usize,
   popup: &Option<PopupMode>,
   popup_input: &str,
+  path: &str
 ) -> Result<(), Box<dyn std::error::Error>> {
   let (term_width, term_height) = crossterm::terminal::size()?;
   let term_width = term_width as usize;
@@ -116,7 +117,7 @@ pub fn draw(
   
   execute!(stdout(), SetForegroundColor(Color::Black), SetBackgroundColor(Color::Red))?;
   
-  let status = format!(" Linea {} | Columna {} | Scroll X:{} Y:{} ", cursor.y + 1, cursor.x + 1, scroll_x, scroll_y);
+  let status = format!(" Linea {} | Columna {} | Scroll X:{} Y:{} | Path {}", cursor.y + 1, cursor.x + 1, scroll_x, scroll_y, path);
   
   let padded = format!("{:<width$}", status, width = term_width);
   print!("{}", padded);

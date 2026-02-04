@@ -19,7 +19,8 @@ mod utils;
 use utils::{ char_to_byte_idx, line_len_chars, set_windows_clipboard, get_windows_clipboard };
 
 mod file;
-use file::{ save_file, open_file };
+use file::{ save_file, open_file, list_directory };
+use std::path::Path;
 
 mod popup;
 use popup::PopupMode;
@@ -40,7 +41,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   let mut scroll_x: usize = 0;
   let mut scroll_y: usize = 0;
 
-  draw(&lines, &cursor, selection_start, scroll_x, scroll_y, 2, &popup, &popup_input)?;
+  let mut current_dir = if popup_input.is_empty() { ".".to_string() } else { popup_input.clone() };
+
+  draw(&lines, &cursor, selection_start, scroll_x, scroll_y, 2, &popup, &popup_input, &current_dir)?;
 
   loop {
     if let Event::Key(key) = read()? {
@@ -56,39 +59,143 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
           }
       
           KeyCode::Enter => {
-            if !popup_input.is_empty() {
-              let path = popup_input.clone();
+            match popup {
+              Some(PopupMode::Save { selected, ref entries, .. }) => {
+                let entry = entries[selected].clone();
+                let full_path = Path::new(&current_dir).join(&entry);
+                let full_path_str = full_path.to_string_lossy().to_string();
 
-              match popup {
-                Some(PopupMode::Save) => {
-                  if let Err(e) = save_file(&path, &lines) {
-                    eprintln!("Error al guardar -> {}", e);
-                  }
-                }
+                if full_path.is_dir() || entry.ends_with('/') || entry == ".." {
+                    let next_dir = if entry == ".." {
+                        let path = Path::new(&current_dir);
+                        if let Ok(abs_path) = std::fs::canonicalize(path) {
+                            abs_path.parent().unwrap_or(Path::new(".")).to_string_lossy().to_string()
+                        } else {
+                            path.parent().unwrap_or(Path::new(".")).to_string_lossy().to_string()
+                        }
+                    } else {
+                        full_path_str
+                    };
 
-                Some(PopupMode::Open) => {
-                  match open_file(&path) {
-                    Ok(new_lines) => {
-                      lines = new_lines;
-                      cursor = CursorPos { x: 0, y: 0 };
-                      scroll_x = 0;
-                      scroll_y = 0;
-                      selection_start = None;
+                    match list_directory(&next_dir) {
+                        Ok(new_entries) => {
+                            current_dir = next_dir;
+                            popup = Some(PopupMode::Save { selected: 0, entries: new_entries, scroll_y: 0 });
+                        }
+                        Err(e) => eprintln!("Error al enlistar -> {}", e),
                     }
-                    Err(e) => {
-                        eprintln!("Error al abrir -> {}", e);
+                } else {
+                    // Si el input está vacío, intentar guardar con el nombre seleccionado
+                    let save_path = if popup_input.is_empty() {
+                        full_path_str
+                    } else {
+                        Path::new(&current_dir).join(&popup_input).to_string_lossy().to_string()
+                    };
+
+                    if let Err(e) = save_file(&save_path, &lines) {
+                        eprintln!("Error al guardar -> {}", e);
                     }
-                  }
+                    popup = None;
+                    popup_input.clear();
                 }
-
-                Some(PopupMode::Help) => {}
-
-                None => {}
               }
-            }
+          
+              Some(PopupMode::Open { selected, ref entries, .. }) => {
+                let entry = entries[selected].clone();
+                let full_path = Path::new(&current_dir).join(&entry);
+                let full_path_str = full_path.to_string_lossy().to_string();
 
-            popup_input.clear();
-            popup = None;
+                if full_path.is_dir() || entry.ends_with('/') || entry == ".." {
+                    let next_dir = if entry == ".." {
+                        let path = Path::new(&current_dir);
+                        if let Ok(abs_path) = std::fs::canonicalize(path) {
+                            abs_path.parent().unwrap_or(Path::new(".")).to_string_lossy().to_string()
+                        } else {
+                            path.parent().unwrap_or(Path::new(".")).to_string_lossy().to_string()
+                        }
+                    } else {
+                        full_path_str
+                    };
+
+                    match list_directory(&next_dir) {
+                        Ok(new_entries) => {
+                            current_dir = next_dir;
+                            popup = Some(PopupMode::Open { selected: 0, entries: new_entries, scroll_y: 0 });
+                        }
+                        Err(e) => eprintln!("Error al enlistar -> {}", e),
+                    }
+                } else {
+                    match open_file(&full_path_str) {
+                        Ok(new_lines) => {
+                          lines = new_lines;
+                          cursor = CursorPos { x: 0, y: 0 };
+                          scroll_x = 0;
+                          scroll_y = 0;
+                          selection_start = None;
+                          popup = None;
+                          popup_input.clear();
+                          if let Some(parent) = Path::new(&full_path_str).parent() {
+                              current_dir = parent.to_string_lossy().to_string();
+                          }
+                        }
+                        Err(e) => eprintln!("Error al abrir -> {}", e),
+                    }
+                }
+              }
+          
+              Some(PopupMode::Help) => {
+                popup = None;
+                popup_input.clear();
+              }
+          
+              None => {}
+            }
+          }
+
+          KeyCode::Up => {
+            if let Some(mode) = &mut popup {
+                match mode {
+                    PopupMode::Open { selected, entries, scroll_y } | 
+                    PopupMode::Save { selected, entries, scroll_y } => {
+                        if *selected > 0 {
+                            *selected -= 1;
+                        } else {
+                            *selected = entries.len().saturating_sub(1);
+                        }
+                        
+                        let max_visible = 6;
+                        if *selected < *scroll_y {
+                            *scroll_y = *selected;
+                        } else if *selected >= *scroll_y + max_visible {
+                            *scroll_y = *selected - (max_visible - 1);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+          }
+
+          KeyCode::Down => {
+            if let Some(mode) = &mut popup {
+                match mode {
+                    PopupMode::Open { selected, entries, scroll_y } | 
+                    PopupMode::Save { selected, entries, scroll_y } => {
+                        if *selected + 1 < entries.len() {
+                            *selected += 1;
+                        } else {
+                            *selected = 0;
+                        }
+
+                        let max_visible = 6;
+                        if *selected < *scroll_y {
+                            *scroll_y = *selected;
+                        } else if *selected >= *scroll_y + max_visible {
+                            *scroll_y = *selected - (max_visible - 1);
+                        }
+                    }
+                    _ => {}
+                }
+            }
           }
       
           KeyCode::Backspace => {
@@ -111,6 +218,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
           2,
           &popup,
           &popup_input,
+          &current_dir
         )?;
         continue;
       }
@@ -165,16 +273,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
           if key.modifiers.contains(KeyModifiers::CONTROL)
           /* && key.modifiers.contains(KeyModifiers::ALT) */ =>
         {
-          popup = Some(PopupMode::Save);
-          popup_input.clear();
+          match list_directory(&current_dir) {
+              Ok(entries) => {
+                  popup = Some(PopupMode::Save { selected: 0, entries, scroll_y: 0 });
+                  popup_input.clear();
+              }
+              Err(e) => eprintln!("Error al listar directorio -> {}", e),
+          }
         }
 
         // abrir
         KeyCode::Char('o')
           if key.modifiers.contains(KeyModifiers::CONTROL)
           /* && key.modifiers.contains(KeyModifiers::ALT) */ => {
-            popup = Some(PopupMode::Open);
-            popup_input.clear();
+            match list_directory(&current_dir) {
+                Ok(entries) => {
+                    popup = Some(PopupMode::Open { selected: 0, entries, scroll_y: 0 });
+                    popup_input.clear();
+                }
+                Err(e) => eprintln!("Error al listar directorio -> {}", e),
+            }
         },
         
         // escribir
@@ -360,7 +478,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         scroll_y = cursor.y + 1 - visible_lines;
       }
 
-      draw(&lines, &cursor, selection_start, scroll_x, scroll_y, 2, &popup, &popup_input)?;
+      draw(&lines, &cursor, selection_start, scroll_x, scroll_y, 2, &popup, &popup_input, &current_dir)?;
     }
   }
 
