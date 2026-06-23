@@ -11,10 +11,20 @@ pub fn line_len_chars(s: &str) -> usize {
   s.chars().count()
 }
 
+#[cfg(windows)]
 pub fn set_windows_clipboard(text: String) {
   let _ = set_clipboard_string(&text);
 }
 
+#[cfg(windows)]
 pub fn get_windows_clipboard() -> Option<String> {
   get_clipboard_string().ok()
+}
+
+#[cfg(not(windows))]
+pub fn set_windows_clipboard(text: String) {}
+
+#[cfg(not(windows))]
+pub fn get_windows_clipboard() -> Option<String> {
+  None
 }

@@ -4,5 +4,8 @@ version = "0.2.0"
 edition = "2024"
 
 [dependencies]
+
+[target.'cfg(windows)'.dependencies]
 clipboard-win = "5.4.1"
+
 crossterm = "0.29.0"
