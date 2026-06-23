@@ -358,14 +358,56 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         
         // escribir
         KeyCode::Char(c) => {
-          let byte_idx = char_to_byte_idx(&lines[cursor.y], cursor.x);
-
           if has_selection(&selection_start, &cursor) {
             delete_selection(&mut lines, &mut cursor, &mut selection_start);
           }
 
-          lines[cursor.y].insert(byte_idx, c);
-          cursor.x += 1;
+          // auto-cierre de pares
+          let closing = match c {
+            '{'  => Some(('{', '}', true)),   // true = insertar espacio entre medio
+            '['  => Some(('[', ']', false)),
+            '('  => Some(('(', ')', false)),
+            '\'' => Some(('\'', '\'', false)),
+            '"'  => Some(('"', '"', false)),
+            _    => None,
+          };
+
+          if let Some((open, close, with_space)) = closing {
+            let line_chars: Vec<char> = lines[cursor.y].chars().collect();
+            // para comillas: no auto-cerrar si el char siguiente ya es el cierre
+            // (evita doblar al escribir el cierre manualmente)
+            let next_is_close = cursor.x < line_chars.len() && line_chars[cursor.x] == close;
+            let is_quote = open == close; // ' o "
+
+            if is_quote && next_is_close {
+              // simplemente mover el cursor hacia adelante (saltar el cierre existente)
+              cursor.x += 1;
+            } else {
+              let byte_idx = char_to_byte_idx(&lines[cursor.y], cursor.x);
+              if with_space {
+                lines[cursor.y].insert_str(byte_idx, "{ }");
+                cursor.x += 2; // queda sobre el '}'
+              } else {
+                let pair = format!("{}{}", open, close);
+                lines[cursor.y].insert_str(byte_idx, &pair);
+                cursor.x += 1; // queda entre los dos chars
+              }
+            }
+          } else {
+            // para ) ] }: si el siguiente char ya es ese cierre, solo saltar
+            let line_chars: Vec<char> = lines[cursor.y].chars().collect();
+            let skip_close = matches!(c, ')' | ']' | '}')
+              && cursor.x < line_chars.len()
+              && line_chars[cursor.x] == c;
+
+            if skip_close {
+              cursor.x += 1;
+            } else {
+              let byte_idx = char_to_byte_idx(&lines[cursor.y], cursor.x);
+              lines[cursor.y].insert(byte_idx, c);
+              cursor.x += 1;
+            }
+          }
         },
 
         // izquierda
@@ -485,12 +527,56 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // enter
         KeyCode::Enter => {
-          let byte_idx = char_to_byte_idx(&lines[cursor.y], cursor.x);
-          let new_line = lines[cursor.y].split_off(byte_idx);
+          // detectar el indent actual (espacios/tabs al inicio de la línea)
+          let current_indent: String = lines[cursor.y]
+            .chars()
+            .take_while(|c| *c == ' ' || *c == '\t')
+            .collect();
 
-          lines.insert(cursor.y + 1, new_line);
-          cursor.y += 1;
-          cursor.x = 0;
+          let line_chars: Vec<char> = lines[cursor.y].chars().collect();
+
+          // caso 1: cursor justo antes de '}' → dos saltos: indent + línea del '}'
+          // esto cubre el flujo normal de auto-cierre "{ |}"
+          let before_close_brace = cursor.x < line_chars.len()
+            && line_chars[cursor.x] == '}';
+
+          // caso 2: cursor justo después de '{' (con o sin espacio/nada después)
+          // pero sin '}' inmediatamente adelante
+          let after_open_brace = !before_close_brace
+            && cursor.x >= 1
+            && line_chars[cursor.x - 1] == '{';
+
+          if before_close_brace {
+            // partir la línea: el '}' queda en la cola
+            let byte_idx = char_to_byte_idx(&lines[cursor.y], cursor.x);
+            let tail = lines[cursor.y].split_off(byte_idx);
+
+            // línea intermedia con indent extra (donde queda el cursor)
+            let inner_indent = format!("{}  ", current_indent);
+            lines.insert(cursor.y + 1, inner_indent.clone());
+
+            // línea del '}' con el indent original
+            lines.insert(cursor.y + 2, format!("{}{}", current_indent, tail));
+
+            cursor.y += 1;
+            cursor.x = inner_indent.len();
+          } else if after_open_brace {
+            // un solo salto con indent extra, lo que haya después del '{'  va a la nueva línea
+            let byte_idx = char_to_byte_idx(&lines[cursor.y], cursor.x);
+            let tail = lines[cursor.y].split_off(byte_idx);
+
+            let inner_indent = format!("{}  ", current_indent);
+            lines.insert(cursor.y + 1, format!("{}{}", inner_indent, tail.trim_start()));
+
+            cursor.y += 1;
+            cursor.x = inner_indent.len();
+          } else {
+            let byte_idx = char_to_byte_idx(&lines[cursor.y], cursor.x);
+            let new_line = lines[cursor.y].split_off(byte_idx);
+            lines.insert(cursor.y + 1, format!("{}{}", current_indent, new_line));
+            cursor.y += 1;
+            cursor.x = current_indent.len();
+          }
         },
 
         // backspace
