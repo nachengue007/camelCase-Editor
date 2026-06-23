@@ -190,7 +190,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             Some(0) => { *selected = None; *scroll_y = 0; }
                             Some(ref mut i) => {
                                 *i -= 1;
-                                let max_visible = 5;
+                                //let max_visible = 5;
                                 if *i < *scroll_y {
                                     *scroll_y = *i;
                                 }
@@ -535,16 +535,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
           let line_chars: Vec<char> = lines[cursor.y].chars().collect();
 
-          // caso 1: cursor justo antes de '}' → dos saltos: indent + línea del '}'
-          // esto cubre el flujo normal de auto-cierre "{ |}"
+          // caso 1: cursor justo antes de un cierre → dos saltos: indent + línea del cierre
           let before_close_brace = cursor.x < line_chars.len()
-            && line_chars[cursor.x] == '}';
-
-          // caso 2: cursor justo después de '{' (con o sin espacio/nada después)
-          // pero sin '}' inmediatamente adelante
+            && matches!(line_chars[cursor.x], '}' | ']' | ')' | '\'' | '"');
+ 
+          // caso 2: cursor justo después de una apertura, sin cierre inmediatamente adelante
           let after_open_brace = !before_close_brace
             && cursor.x >= 1
-            && line_chars[cursor.x - 1] == '{';
+            && matches!(line_chars[cursor.x - 1], '{' | '[' | '(' | '\'' | '"');
 
           if before_close_brace {
             // partir la línea: el '}' queda en la cola
