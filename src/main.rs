@@ -26,6 +26,21 @@ mod popup;
 use popup::PopupMode;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+  // Argumento opcional: directorio de trabajo inicial
+  // Uso: camelCaseEditor.exe [directorio]
+  // Ej:  camelCaseEditor.exe C:\Users\nacho\Desktop\proyecto
+  // Ej:  camelCaseEditor.exe ../proyecto
+  let mut current_dir = std::env::args()
+    .nth(1)
+    .map(|arg| {
+      let path = Path::new(&arg);
+      // Convertir a ruta absoluta para evitar confusiones al navegar
+      std::fs::canonicalize(path)
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_else(|_| arg)  // Si falla (no existe), usar el arg tal cual
+    })
+    .unwrap_or_else(|| ".".to_string());
+
   enable_raw_mode()?;
 
   execute!(stdout(),EnterAlternateScreen)?;
@@ -40,8 +55,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
   let mut scroll_x: usize = 0;
   let mut scroll_y: usize = 0;
-
-  let mut current_dir = ".".to_string();
 
   draw(&lines, &cursor, selection_start, scroll_x, scroll_y, 2, &popup, &popup_input, &current_dir)?;
 
