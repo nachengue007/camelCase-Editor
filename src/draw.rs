@@ -27,7 +27,7 @@ pub fn draw(
 
   execute!(stdout(), MoveTo(0, 0))?;
 
-  let text: &str = "camelCase Editor  -  ctrl + H ayuda";
+  let text = format!("camelCase Editor v{}  -  ctrl + H ayuda", env!("CARGO_PKG_VERSION"));
   let left_padding: usize = (term_width.saturating_sub(text.len())) / 2;
   let right_padding: usize = term_width.saturating_sub(text.len()).saturating_sub(left_padding);
 
