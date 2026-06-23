@@ -61,42 +61,49 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
           KeyCode::Enter => {
             match popup {
               Some(PopupMode::Save { selected, ref entries, .. }) => {
-                let entry = entries[selected].clone();
-                let full_path = Path::new(&current_dir).join(&entry);
-                let full_path_str = full_path.to_string_lossy().to_string();
-
-                if full_path.is_dir() || entry.ends_with('/') || entry == ".." {
-                    let next_dir = if entry == ".." {
-                        let path = Path::new(&current_dir);
-                        if let Ok(abs_path) = std::fs::canonicalize(path) {
-                            abs_path.parent().unwrap_or(Path::new(".")).to_string_lossy().to_string()
-                        } else {
-                            path.parent().unwrap_or(Path::new(".")).to_string_lossy().to_string()
-                        }
-                    } else {
-                        full_path_str
-                    };
-
-                    match list_directory(&next_dir) {
-                        Ok(new_entries) => {
-                            current_dir = next_dir;
-                            popup = Some(PopupMode::Save { selected: 0, entries: new_entries, scroll_y: 0 });
-                        }
-                        Err(e) => eprintln!("Error al enlistar -> {}", e),
-                    }
-                } else {
-                    // Si el input está vacío, intentar guardar con el nombre seleccionado
-                    let save_path = if popup_input.is_empty() {
-                        full_path_str
-                    } else {
-                        Path::new(&current_dir).join(&popup_input).to_string_lossy().to_string()
-                    };
-
+                match selected {
+                  // "Guardar como:" está seleccionado: guardar con el nombre del input
+                  None => {
+                    let save_path = Path::new(&current_dir).join(&popup_input).to_string_lossy().to_string();
                     if let Err(e) = save_file(&save_path, &lines) {
                         eprintln!("Error al guardar -> {}", e);
                     }
                     popup = None;
                     popup_input.clear();
+                  }
+                  // Una entrada del directorio está seleccionada
+                  Some(selected) => {
+                    let entry = entries[selected].clone();
+                    let full_path = Path::new(&current_dir).join(&entry);
+                    let full_path_str = full_path.to_string_lossy().to_string();
+
+                    if full_path.is_dir() || entry.ends_with('/') || entry == ".." {
+                        let next_dir = if entry == ".." {
+                            let path = Path::new(&current_dir);
+                            if let Ok(abs_path) = std::fs::canonicalize(path) {
+                                abs_path.parent().unwrap_or(Path::new(".")).to_string_lossy().to_string()
+                            } else {
+                                path.parent().unwrap_or(Path::new(".")).to_string_lossy().to_string()
+                            }
+                        } else {
+                            full_path_str
+                        };
+
+                        match list_directory(&next_dir) {
+                            Ok(new_entries) => {
+                                current_dir = next_dir;
+                                popup = Some(PopupMode::Save { selected: None, entries: new_entries, scroll_y: 0 });
+                            }
+                            Err(e) => eprintln!("Error al enlistar -> {}", e),
+                        }
+                    } else {
+                        // Seleccionó un archivo existente: poner su nombre en el input y subir a "Guardar como:"
+                        popup_input = entry.clone();
+                        if let Some(PopupMode::Save { selected, .. }) = &mut popup {
+                            *selected = None;
+                        }
+                    }
+                  }
                 }
               }
           
@@ -155,14 +162,34 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
           KeyCode::Up => {
             if let Some(mode) = &mut popup {
                 match mode {
-                    PopupMode::Open { selected, entries, scroll_y } | 
                     PopupMode::Save { selected, entries, scroll_y } => {
+                        match *selected {
+                            // desde "Guardar como:" salta al último archivo
+                            None => {
+                                *selected = Some(entries.len().saturating_sub(1));
+                                let max_visible = 5;
+                                let idx = entries.len().saturating_sub(1);
+                                if idx >= *scroll_y + max_visible {
+                                    *scroll_y = idx + 1 - max_visible;
+                                }
+                            }
+                            // desde el primer archivo sube a "Guardar como:"
+                            Some(0) => { *selected = None; *scroll_y = 0; }
+                            Some(ref mut i) => {
+                                *i -= 1;
+                                let max_visible = 5;
+                                if *i < *scroll_y {
+                                    *scroll_y = *i;
+                                }
+                            }
+                        }
+                    }
+                    PopupMode::Open { selected, entries, scroll_y } => {
                         if *selected > 0 {
                             *selected -= 1;
                         } else {
                             *selected = entries.len().saturating_sub(1);
                         }
-                        
                         let max_visible = 6;
                         if *selected < *scroll_y {
                             *scroll_y = *selected;
@@ -178,14 +205,35 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
           KeyCode::Down => {
             if let Some(mode) = &mut popup {
                 match mode {
-                    PopupMode::Open { selected, entries, scroll_y } | 
                     PopupMode::Save { selected, entries, scroll_y } => {
+                        match *selected {
+                            // desde "Guardar como:" baja al primer archivo
+                            None => {
+                                if !entries.is_empty() {
+                                    *selected = Some(0);
+                                    *scroll_y = 0;
+                                }
+                            }
+                            // desde el último archivo vuelve a "Guardar como:"
+                            Some(ref mut i) if *i + 1 >= entries.len() => {
+                                *selected = None;
+                                *scroll_y = 0;
+                            }
+                            Some(ref mut i) => {
+                                *i += 1;
+                                let max_visible = 5;
+                                if *i >= *scroll_y + max_visible {
+                                    *scroll_y = *i + 1 - max_visible;
+                                }
+                            }
+                        }
+                    }
+                    PopupMode::Open { selected, entries, scroll_y } => {
                         if *selected + 1 < entries.len() {
                             *selected += 1;
                         } else {
                             *selected = 0;
                         }
-
                         let max_visible = 6;
                         if *selected < *scroll_y {
                             *scroll_y = *selected;
@@ -275,7 +323,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         {
           match list_directory(&current_dir) {
               Ok(entries) => {
-                  popup = Some(PopupMode::Save { selected: 0, entries, scroll_y: 0 });
+                  popup = Some(PopupMode::Save { selected: None, entries, scroll_y: 0 });
                   popup_input.clear();
               }
               Err(e) => eprintln!("Error al listar directorio -> {}", e),

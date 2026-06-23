@@ -15,7 +15,7 @@ pub struct Popup {
 
 #[derive(Clone)]
 pub enum PopupMode {
-  Save { selected: usize, entries: Vec<String>, scroll_y: usize },
+  Save { selected: Option<usize>, entries: Vec<String>, scroll_y: usize },
   Open { selected: usize, entries: Vec<String>, scroll_y: usize },
   Help,
 }
@@ -61,9 +61,9 @@ impl PopupMode {
     match self {
       PopupMode::Save { selected, entries, scroll_y } => {
           let mut lines = vec![format!("Guardar como: {}", input)];
-          lines.push(format!("Directorio: .")); // simplified for now or use actual path
-          
-          let max_visible = 5; 
+          lines.push(format!("Directorio: ."));
+
+          let max_visible = 5;
           let visible_entries = entries.iter()
               .skip(*scroll_y)
               .take(max_visible)
@@ -71,13 +71,19 @@ impl PopupMode {
 
           lines.extend(visible_entries);
 
+          // None => fila "Guardar como:" (indice 0), Some(i) => entrada i (+2 por cabeceras)
+          let selected_line = match selected {
+              None => Some(0),
+              Some(i) => Some(i.saturating_sub(*scroll_y) + 2),
+          };
+
           Popup {
               title: "Guardar archivo".to_string(),
               lines,
-              footer: format!("Enter = Guardar   Esc = Cancelar"),
+              footer: "Enter = Confirmar   Esc = Cancelar".to_string(),
               width: 50,
               height: 12,
-              selected_line: Some(selected.saturating_sub(*scroll_y) + 2), // +2 because of title and dir header
+              selected_line,
               scroll: *scroll_y,
           }
       }
