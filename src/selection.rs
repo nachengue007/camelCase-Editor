@@ -126,7 +126,8 @@ pub fn paste_text(lines: &mut Vec<String>, cursor: &mut CursorPos, selection: &m
     cursor.x += parts[0].chars().count();
   }
   else {
-    let tail = lines[cursor.y].split_off(cursor.x);
+    let byte_idx = char_to_byte_idx(&lines[cursor.y], cursor.x);
+    let tail = lines[cursor.y].split_off(byte_idx);
     lines[cursor.y].push_str(parts[0]);
 
     for i in 1..parts.len() {

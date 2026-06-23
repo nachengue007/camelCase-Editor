@@ -41,7 +41,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   let mut scroll_x: usize = 0;
   let mut scroll_y: usize = 0;
 
-  let mut current_dir = if popup_input.is_empty() { ".".to_string() } else { popup_input.clone() };
+  let mut current_dir = ".".to_string();
 
   draw(&lines, &cursor, selection_start, scroll_x, scroll_y, 2, &popup, &popup_input, &current_dir)?;
 
@@ -393,11 +393,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
           let selecting = key.modifiers.contains(KeyModifiers::SHIFT);
 
           if selecting {
-            if key.modifiers.contains(KeyModifiers::CONTROL){
-              cursor.y = 0;
-              cursor.x = 0;
-            }
-
             start_selection_if_needed(&mut selection_start, CursorPos { x: cursor.x, y: cursor.y });
           }
           else{ 
